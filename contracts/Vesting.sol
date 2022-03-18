@@ -21,8 +21,9 @@ contract Vesting is Ownable {
     bool private _isSetSchedule;
 
 
+
     struct User {
-        bool isUser;
+        bool isUser; //TODO không cần, check xem có phải user trong pool hay không thì dùng u.amount > 0 là được. hàm remove set u.amount = 0
         uint256 amount;
         uint256 amountClaimed;
         //bool hasSchedule;
@@ -30,6 +31,8 @@ contract Vesting is Ownable {
     mapping(address => User) private _users;
     //mapping(address => vestingSchedule) private _vestingSchedules;
 
+
+    //TODO event bên dưới khai báo hết lên đây đi e, uint256 thì không cần indexed thôi
     event AddUser(address indexed account, uint256 indexed amount);
     event AddManyUser(address[] indexed accounts, uint256[] indexed amounts);
     event RemoveUser(address indexed account);
@@ -48,6 +51,7 @@ contract Vesting is Ownable {
         _;
     }
 
+    //TODO indexed làm gì?
     event SetVestingSchedule(        
         uint32 indexed startDate,
         uint32 indexed cliffPeriod,
@@ -61,6 +65,8 @@ contract Vesting is Ownable {
         uint32 interval,
         uint32 milestones
     ) public returns (bool ok) {
+        //TODO check xem vesting pool đã đc set trước đó chưa. Không set schedule 2 lần
+        //exception string theo format: tên contract : text. Ở constructor a có viết mẫu đấy.
         require(
             startDate > 0 && cliffPeriod > 0 && interval > 0 && milestones > 0,
             "Invalid input!"
@@ -87,6 +93,7 @@ contract Vesting is Ownable {
     function withdrawToken() public onlyUser returns(bool ok) {
         require(_tokenCanWithdraw(msg.sender) > 0);
 
+        //Dùng safeTransfer thay vì transfer
         bool txn = _token.transfer(msg.sender,_tokenCanWithdraw(msg.sender));
 
         emit WithdrawToken();
@@ -174,12 +181,13 @@ contract Vesting is Ownable {
     //     return _users[account].hasSchedule;
     // } 
 
-
+    //TODO hàm này trong vòng for gọi lại addUser là được mà? ko cần event AddManyUser đâu.
     function addManyUser(address[] memory accounts, uint256[] memory amounts)
         public
         onlyOwner
         returns (bool ok)
     {
+        //require acc, amount length > 0
         require(accounts.length == amounts.length);
 
         address account;
