@@ -8,11 +8,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract Vesting is Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 private _token;
-    address tokenAddress;
+    uint32 private constant SECONDS_PER_DAY = 24 * 60 * 60;
 
-    uint32 private constant SECONDS_PER_DAY = 24 * 60 * 60; 
-    //mapping(address => bool)private isUser;
+    IERC20 private _token;
+
+    address tokenAddress;
 
     uint32 private _startDate;
     uint32 private _cliffPeriod; /* Duration of the cliff, with respect to the grant start day, in days. */
@@ -20,44 +20,38 @@ contract Vesting is Ownable {
     uint32 private _milestones;
     bool private _isSetSchedule;
 
-
-
     struct User {
-        bool isUser; //TODO không cần, check xem có phải user trong pool hay không thì dùng u.amount > 0 là được. hàm remove set u.amount = 0
+        //bool isUser; //TODO không cần, check xem có phải user trong pool hay không thì dùng u.amount > 0 là được. hàm remove set u.amount = 0
         uint256 amount;
         uint256 amountClaimed;
         //bool hasSchedule;
     }
     mapping(address => User) private _users;
-    //mapping(address => vestingSchedule) private _vestingSchedules;
-
 
     //TODO event bên dưới khai báo hết lên đây đi e, uint256 thì không cần indexed thôi
     event AddUser(address indexed account, uint256 indexed amount);
-    event AddManyUser(address[] indexed accounts, uint256[] indexed amounts);
+    event AddManyUser(address[] indexed accounts, uint256[] amounts);
     event RemoveUser(address indexed account);
-
-
+    //TODO indexed làm gì?
+    event SetVestingSchedule(
+        uint32 startDate,
+        uint32 cliffPeriod,
+        uint32 interval,
+        uint32 milestones
+    );
+    event WithdrawToken();
 
     constructor(address token) {
         require(token != address(0), "Vesting: token address must not be 0");
         _token = IERC20(token);
-        tokenAddress = token; // fix later
-        _isSetSchedule=false;
+        //tokenAddress = token; // fix later
+        _isSetSchedule = false;
     }
 
     modifier onlyUser() {
         //  require(); /* */
         _;
     }
-
-    //TODO indexed làm gì?
-    event SetVestingSchedule(        
-        uint32 indexed startDate,
-        uint32 indexed cliffPeriod,
-        uint32 indexed interval,
-        uint32 milestones
-    );
 
     function setVestingSchedule(
         uint32 startDate,
@@ -69,88 +63,79 @@ contract Vesting is Ownable {
         //exception string theo format: tên contract : text. Ở constructor a có viết mẫu đấy.
         require(
             startDate > 0 && cliffPeriod > 0 && interval > 0 && milestones > 0,
-            "Invalid input!"
+            "Vesting: Invalid input!"
         );
-        require(cliffPeriod % interval == 0, "Invalid cliff period");
+        require(cliffPeriod % interval == 0, "Vesting: Invalid cliff period");
+        require(_isSetSchedule == false, "Vesting: can't set schedule yet");
 
-        _startDate=startDate;
-        _cliffPeriod=cliffPeriod;
-        _interval=interval;
-        _milestones=milestones;
-        _isSetSchedule=true;
+        _startDate = startDate;
+        _cliffPeriod = cliffPeriod;
+        _interval = interval;
+        _milestones = milestones;
+        _isSetSchedule = true;
 
-        emit SetVestingSchedule(          
-            startDate,
-            cliffPeriod,
-            interval,
-            milestones
-        );
+        emit SetVestingSchedule(startDate, cliffPeriod, interval, milestones);
         return true;
     }
 
-    event WithdrawToken();
-
-    function withdrawToken() public onlyUser returns(bool ok) {
+    function withdrawToken() public onlyUser returns (bool ok) {
         require(_tokenCanWithdraw(msg.sender) > 0);
 
         //Dùng safeTransfer thay vì transfer
-        bool txn = _token.transfer(msg.sender,_tokenCanWithdraw(msg.sender));
+        _token.safeTransfer(msg.sender, _tokenCanWithdraw(msg.sender));
 
         emit WithdrawToken();
 
-        return txn;
-
+        return true;
     }
 
-    function vestingOf(address account) public view onlyUser onlyOwner returns (uint256 claim,uint256 remain) {
-        return (_tokenClaimed(account),_tokenRemained(account));
+    function vestingOf(address account)
+        public
+        view
+        onlyUser
+        onlyOwner
+        returns (uint256 claim, uint256 remain)
+    {
+        return (_tokenClaimed(account), _tokenRemained(account));
     }
 
-///// Calculating section
+    ///// Calculating section
 
     function _today() private view returns (uint32 dayNumber) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
-
-    function _tokenRemained(address account) private view returns (uint256){
-
+    function _tokenRemained(address account) private view returns (uint256) {
         uint32 onday = _today();
         User memory user = _users[account];
 
-
         //if user has no schedule or before cliff, then full
-        if(!_isSetSchedule || onday < _startDate + _cliffPeriod){
+        if (!_isSetSchedule || onday < _startDate + _cliffPeriod) {
             return user.amount;
         }
-        //if after end of vesting, return total - amountClaimed
-        else if(onday >= _startDate + _interval * _milestones){
+        //if after end of vesting, return 0
+        else if (onday >= _startDate + _interval * _milestones) {
             return uint256(0);
         }
         // otherwise, calcute
-        else{
+        else {
             uint32 daysVested = onday - _startDate;
-            uint32 effectiveDaysVested = (daysVested / _interval) * _interval;
+            uint32 milestonesVested = (daysVested - _cliffPeriod) / _interval;
 
-           // uint256 vested = user.amount * effectiveDaysVested / // not done yet
+            uint256 vested = (user.amount * (milestonesVested + 1)) /
+                _milestones;
+            return (user.amount - vested);
         }
-      //  return (user.amount - effectiveDaysVested);  //hơi đụt but fix later
-        return uint256(0);
     }
-    function _tokenClaimed(address account) private view returns(uint256){
-        
-        //User memory user = _users[account];
 
+    function _tokenClaimed(address account) private view returns (uint256) {
         return (_users[account].amount - _tokenRemained(account));
-
     }
 
-    function _tokenCanWithdraw(address account) private view returns(uint256){
-        return uint256(0);
+    function _tokenCanWithdraw(address account) private view returns (uint256) {
+        return (_tokenClaimed(account) - _users[account].amountClaimed);
     }
 
-
-    
     ///////// User Handle
 
     function addUser(address account, uint256 amount)
@@ -158,14 +143,13 @@ contract Vesting is Ownable {
         onlyOwner
         returns (bool ok)
     {
-        _users[account].isUser = true;
         _users[account].amount = amount;
         emit AddUser(account, amount);
         return true;
     }
 
     function isUser(address account) public view onlyOwner returns (bool) {
-        return _users[account].isUser;
+        return _users[account].amount > 0;
     }
 
     function checkBalance(address account)
@@ -179,7 +163,7 @@ contract Vesting is Ownable {
 
     // function checkSchedule(address account)public view onlyOwner returns (bool) {
     //     return _users[account].hasSchedule;
-    // } 
+    // }
 
     //TODO hàm này trong vòng for gọi lại addUser là được mà? ko cần event AddManyUser đâu.
     function addManyUser(address[] memory accounts, uint256[] memory amounts)
@@ -188,23 +172,18 @@ contract Vesting is Ownable {
         returns (bool ok)
     {
         //require acc, amount length > 0
-        require(accounts.length == amounts.length);
+        require(accounts.length == amounts.length, "Vesting: Not equal length");
 
-        address account;
         for (uint256 index = 0; index < accounts.length; index++) {
-            account = accounts[index];
-
-            _users[account].isUser = true;
-            //_users[account].amount = amounts[index];
+            addUser(accounts[index], amounts[index]);
         }
-        emit AddManyUser(accounts, amounts);
         return true;
     }
 
     function removeUser(address account) public onlyOwner returns (bool ok) {
         //require(); /* trước ngày bắt đầu vesting contract */
 
-        _users[account].isUser = false;
+        //_users[account].isUser = false;
         _users[account].amount = 0;
         emit RemoveUser(account);
         return true;
