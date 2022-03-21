@@ -1,8 +1,25 @@
 const Vesting = artifacts.require("Vesting");
+const timeMachine = require('ganache-time-traveler');
 
 contract('Vesting', (accounts) => {
+    let token;
+    let vestingInstance;
+    let snapshot;
+    let snapshotId;
+    const SECONDS_PER_DAY = 86400;
+
+    beforeEach(async() => {
+        snapshot = await timeMachine.takeSnapshot();
+        snapshotId = snapshot['result'];
+        token = await Token.deployed();
+        vestingInstance = await Vesting.new(token.address);
+    });
+
+    afterEach(async() => {
+        await timeMachine.revertToSnapshot(snapshotId);
+    })
+
     it('should add user', async () => {
-        const vestingInstance = await Vesting.deployed();
         const amount = 100;
         const addUser = await vestingInstance.addUser(accounts[1], amount, { from: accounts[0] });
 
@@ -12,12 +29,12 @@ contract('Vesting', (accounts) => {
     });
 
     it('should add 2 users', async () => {
-        const vestingInstance = await Vesting.deployed();
         const user_1 = accounts[1];
         const user_2 = accounts[2];
         const users = [user_1, user_2];
         const amounts = [100, 200];
         const addManyUser = await vestingInstance.addManyUser(users, amounts, { from: accounts[0] });
+        await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 10);
 
         const checkBalance_1 = await vestingInstance.checkBalance.call(user_1);
         const checkBalance_2 = await vestingInstance.checkBalance.call(user_2);
@@ -26,7 +43,6 @@ contract('Vesting', (accounts) => {
 
     });
     it('should remove user', async () => {
-        const vestingInstance = await Vesting.deployed();
         const amount = 100;
         const addUser = await vestingInstance.addUser(accounts[1], amount, { from: accounts[0] });
 
@@ -53,7 +69,6 @@ contract('Vesting', (accounts) => {
     });
 
     it('should withdraw', async () => {
-        const vestingInstance = await Vesting.deployed();
         const SECONDS_PER_DAY = 86400;
 
         const JAN_1_2022 = 1640995200 / SECONDS_PER_DAY; //Saturday, January 1, 2022 0:00:00 AM

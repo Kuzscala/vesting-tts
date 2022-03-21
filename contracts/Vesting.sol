@@ -113,7 +113,7 @@ contract Vesting is Ownable {
     function _today() private view returns (uint32 dayNumber) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
-
+    
     function _effectiveDay(uint32 onDayOrToday)
         internal
         view
