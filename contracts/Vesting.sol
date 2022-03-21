@@ -78,25 +78,34 @@ contract Vesting is Ownable {
         return true;
     }
 
+    function isSetVestingSchedule() public view returns (bool) {
+        return _isSetSchedule;
+    }
+
     function withdrawToken() public onlyUser returns (bool ok) {
-        require(_tokenCanWithdraw(msg.sender) > 0);
+        require(tokenCanWithdraw(msg.sender, 0) > 0);
 
         //Dùng safeTransfer thay vì transfer
-        _token.safeTransfer(msg.sender, _tokenCanWithdraw(msg.sender));
+        _token.safeTransfer(msg.sender, tokenCanWithdraw(msg.sender, 0));
 
+        _users[msg.sender].amountClaimed += tokenCanWithdraw(msg.sender, 0);
+        
         emit WithdrawToken();
 
         return true;
     }
 
-    function vestingOf(address account)
+    function vestingOf(address account, uint32 onDayOrToday)
         public
         view
         onlyUser
         onlyOwner
         returns (uint256 claim, uint256 remain)
     {
-        return (_tokenClaimed(account), _tokenRemained(account));
+        return (
+            tokenClaimed(account, onDayOrToday),
+            tokenRemained(account, onDayOrToday)
+        );
     }
 
     ///// Calculating section
@@ -105,8 +114,21 @@ contract Vesting is Ownable {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
-    function _tokenRemained(address account) private view returns (uint256) {
-        uint32 onday = _today();
+    function _effectiveDay(uint32 onDayOrToday)
+        internal
+        view
+        returns (uint32 dayNumber)
+    {
+        return onDayOrToday == 0 ? _today() : onDayOrToday;
+    }
+
+    function tokenRemained(address account, uint32 onDayOrToday)
+        public
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        uint32 onday = _effectiveDay(onDayOrToday);
         User memory user = _users[account];
 
         //if user has no schedule or before cliff, then full
@@ -128,12 +150,23 @@ contract Vesting is Ownable {
         }
     }
 
-    function _tokenClaimed(address account) private view returns (uint256) {
-        return (_users[account].amount - _tokenRemained(account));
+    function tokenClaimed(address account, uint32 onDayOrToday)
+        public
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return (_users[account].amount - tokenRemained(account, onDayOrToday));
     }
 
-    function _tokenCanWithdraw(address account) private view returns (uint256) {
-        return (_tokenClaimed(account) - _users[account].amountClaimed);
+    function tokenCanWithdraw(address account, uint32 onDayOrToday)
+        public
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return (tokenClaimed(account, onDayOrToday) -
+            _users[account].amountClaimed);
     }
 
     ///////// User Handle
@@ -144,6 +177,7 @@ contract Vesting is Ownable {
         returns (bool ok)
     {
         _users[account].amount = amount;
+        _users[account].amountClaimed = 0;
         emit AddUser(account, amount);
         return true;
     }
@@ -161,6 +195,15 @@ contract Vesting is Ownable {
         return _users[account].amount;
     }
 
+    function checkClaimedAmount(address account)
+        public
+        view
+        onlyOwner
+        returns (uint256)
+    {
+        return _users[account].amountClaimed;
+    }
+
     // function checkSchedule(address account)public view onlyOwner returns (bool) {
     //     return _users[account].hasSchedule;
     // }
@@ -172,6 +215,10 @@ contract Vesting is Ownable {
         returns (bool ok)
     {
         //require acc, amount length > 0
+        require(
+            accounts.length > 0 && amounts.length > 0,
+            "Vesting: null array input"
+        );
         require(accounts.length == amounts.length, "Vesting: Not equal length");
 
         for (uint256 index = 0; index < accounts.length; index++) {
@@ -181,10 +228,13 @@ contract Vesting is Ownable {
     }
 
     function removeUser(address account) public onlyOwner returns (bool ok) {
-        //require(); /* trước ngày bắt đầu vesting contract */
+        require(
+            _startDate * SECONDS_PER_DAY > block.timestamp || _startDate == 0,
+            "Vesting: can't remove user when vesting"
+        ); /* before vesting day contract */
 
-        //_users[account].isUser = false;
         _users[account].amount = 0;
+        _users[account].amountClaimed = 0;
         emit RemoveUser(account);
         return true;
     }
