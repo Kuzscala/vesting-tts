@@ -21,18 +21,14 @@ contract Vesting is Ownable {
     bool private _isSetSchedule;
 
     struct User {
-        //bool isUser; //TODO không cần, check xem có phải user trong pool hay không thì dùng u.amount > 0 là được. hàm remove set u.amount = 0
         uint256 amount;
         uint256 amountClaimed;
-        //bool hasSchedule;
     }
     mapping(address => User) private _users;
 
-    //TODO event bên dưới khai báo hết lên đây đi e, uint256 thì không cần indexed thôi
     event AddUser(address indexed account, uint256 indexed amount);
     event AddManyUser(address[] indexed accounts, uint256[] amounts);
     event RemoveUser(address indexed account);
-    //TODO indexed làm gì?
     event SetVestingSchedule(
         uint32 startDate,
         uint32 cliffPeriod,
@@ -44,7 +40,7 @@ contract Vesting is Ownable {
     constructor(address token) {
         require(token != address(0), "Vesting: token address must not be 0");
         _token = IERC20(token);
-        //tokenAddress = token; // fix later
+        tokenAddress = token; // fix later
         _isSetSchedule = false;
     }
 
@@ -59,8 +55,6 @@ contract Vesting is Ownable {
         uint32 interval,
         uint32 milestones
     ) public returns (bool ok) {
-        //TODO check xem vesting pool đã đc set trước đó chưa. Không set schedule 2 lần
-        //exception string theo format: tên contract : text. Ở constructor a có viết mẫu đấy.
         require(
             startDate > 0 && cliffPeriod > 0 && interval > 0 && milestones > 0,
             "Vesting: Invalid input!"
@@ -82,30 +76,28 @@ contract Vesting is Ownable {
         return _isSetSchedule;
     }
 
-    function withdrawToken() public onlyUser returns (bool ok) {
-        require(tokenCanWithdraw(msg.sender, 0) > 0);
+    function withdrawToken() public payable onlyUser returns (bool ok) {
+        require(tokenCanWithdraw(msg.sender) > 0);
 
         //Dùng safeTransfer thay vì transfer
-        _token.safeTransfer(msg.sender, tokenCanWithdraw(msg.sender, 0));
 
-        _users[msg.sender].amountClaimed += tokenCanWithdraw(msg.sender, 0);
-        
+        _users[msg.sender].amountClaimed += tokenCanWithdraw(msg.sender);
+
+        _token.safeTransfer(msg.sender, tokenCanWithdraw(msg.sender));
+
         emit WithdrawToken();
 
         return true;
     }
 
-    function vestingOf(address account, uint32 onDayOrToday)
+    function vestingOf(address account)
         public
         view
         onlyUser
         onlyOwner
         returns (uint256 claim, uint256 remain)
     {
-        return (
-            tokenClaimed(account, onDayOrToday),
-            tokenRemained(account, onDayOrToday)
-        );
+        return (tokenClaimed(account), tokenRemained(account));
     }
 
     ///// Calculating section
@@ -113,22 +105,13 @@ contract Vesting is Ownable {
     function _today() private view returns (uint32 dayNumber) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
-    
-    function _effectiveDay(uint32 onDayOrToday)
-        internal
-        view
-        returns (uint32 dayNumber)
-    {
-        return onDayOrToday == 0 ? _today() : onDayOrToday;
+
+    function whatday() public view returns (uint32) {
+        return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
-    function tokenRemained(address account, uint32 onDayOrToday)
-        public
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        uint32 onday = _effectiveDay(onDayOrToday);
+    function tokenRemained(address account) public view returns (uint256) {
+        uint32 onday = _today();
         User memory user = _users[account];
 
         //if user has no schedule or before cliff, then full
@@ -150,23 +133,12 @@ contract Vesting is Ownable {
         }
     }
 
-    function tokenClaimed(address account, uint32 onDayOrToday)
-        public
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return (_users[account].amount - tokenRemained(account, onDayOrToday));
+    function tokenClaimed(address account) public view returns (uint256) {
+        return (_users[account].amount - tokenRemained(account));
     }
 
-    function tokenCanWithdraw(address account, uint32 onDayOrToday)
-        public
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return (tokenClaimed(account, onDayOrToday) -
-            _users[account].amountClaimed);
+    function tokenCanWithdraw(address account) public view returns (uint256) {
+        return (tokenClaimed(account) - _users[account].amountClaimed);
     }
 
     ///////// User Handle
