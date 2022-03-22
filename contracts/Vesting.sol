@@ -77,9 +77,11 @@ contract Vesting is Ownable {
     }
 
     function withdrawToken() public payable onlyUser returns (bool ok) {
-        require(tokenCanWithdraw(msg.sender) > 0);
+        require(
+            tokenCanWithdraw(msg.sender) > 0,
+            "Vesting: Insufficient amount to withdraw"
+        );
 
-        //Dùng safeTransfer thay vì transfer
 
         _users[msg.sender].amountClaimed += tokenCanWithdraw(msg.sender);
 
@@ -103,10 +105,6 @@ contract Vesting is Ownable {
     ///// Calculating section
 
     function _today() private view returns (uint32 dayNumber) {
-        return uint32(block.timestamp / SECONDS_PER_DAY);
-    }
-
-    function whatday() public view returns (uint32) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
@@ -141,13 +139,15 @@ contract Vesting is Ownable {
         return (tokenClaimed(account) - _users[account].amountClaimed);
     }
 
-    ///////// User Handle
+    ///////// User Handle Section
 
     function addUser(address account, uint256 amount)
         public
         onlyOwner
         returns (bool ok)
     {
+        require(amount > 0, "Vesting: Insufficient amount");
+
         _users[account].amount = amount;
         _users[account].amountClaimed = 0;
         emit AddUser(account, amount);
@@ -176,11 +176,6 @@ contract Vesting is Ownable {
         return _users[account].amountClaimed;
     }
 
-    // function checkSchedule(address account)public view onlyOwner returns (bool) {
-    //     return _users[account].hasSchedule;
-    // }
-
-    //TODO hàm này trong vòng for gọi lại addUser là được mà? ko cần event AddManyUser đâu.
     function addManyUser(address[] memory accounts, uint256[] memory amounts)
         public
         onlyOwner
@@ -200,10 +195,11 @@ contract Vesting is Ownable {
     }
 
     function removeUser(address account) public onlyOwner returns (bool ok) {
-        require(
-            _startDate * SECONDS_PER_DAY > block.timestamp || _startDate == 0,
+        require( // can remove user if now is before vesting or schedule is not set
+            _startDate >= (block.timestamp / SECONDS_PER_DAY) ||
+                _startDate == 0,
             "Vesting: can't remove user when vesting"
-        ); /* before vesting day contract */
+        ); 
 
         _users[account].amount = 0;
         _users[account].amountClaimed = 0;
