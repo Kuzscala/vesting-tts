@@ -8,6 +8,7 @@ contract('Vesting', (accounts) => {
     let vestingInstance;
     let snapshot;
     let snapshotId;
+    let today;
     const SECONDS_PER_DAY = 86400;
     const MILISECONDS_IN_DAY = 86400000;
     // let catchRevert = require("./exception").catchRevert;

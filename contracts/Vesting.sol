@@ -76,6 +76,8 @@ contract Vesting is Ownable {
         return _isSetSchedule;
     }
 
+
+    //tokenCanWithdraw tự tính toán lại ở đây, đừng làm nhiều hàm quá.
     function withdrawToken() public payable onlyUser returns (bool ok) {
         require(
             tokenCanWithdraw(msg.sender) > 0,
@@ -92,6 +94,7 @@ contract Vesting is Ownable {
         return true;
     }
 
+    //TODO chú có cái mapping _users này để làm gì?
     function vestingOf(address account)
         public
         view
@@ -108,6 +111,7 @@ contract Vesting is Ownable {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
+    //TODO những hàm này chỉ cần cập nhật con số lúc withdraw là được mà, sao cần cả hàm vậy e
     function tokenRemained(address account) public view returns (uint256) {
         uint32 onday = _today();
         User memory user = _users[account];
@@ -131,16 +135,20 @@ contract Vesting is Ownable {
         }
     }
 
+    //TODO tại sao lại cần hàm này? trong mapping không lấy ra được à?
     function tokenClaimed(address account) public view returns (uint256) {
         return (_users[account].amount - tokenRemained(account));
     }
 
+
+    //TODO tại sao lại cần hàm này?
     function tokenCanWithdraw(address account) public view returns (uint256) {
         return (tokenClaimed(account) - _users[account].amountClaimed);
     }
 
     ///////// User Handle Section
 
+    //TODO only addUser before startDate
     function addUser(address account, uint256 amount)
         public
         onlyOwner
