@@ -3,16 +3,18 @@ pragma solidity ^0.8.9;
 
 import "./Token.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Vesting is Ownable {
+//import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract Vesting {
     using SafeERC20 for IERC20;
 
     uint32 private constant SECONDS_PER_DAY = 24 * 60 * 60;
 
     IERC20 private _token;
 
-    address tokenAddress;
+    // address tokenAddress;
+    address private _owner;
 
     uint32 private _startDate;
     uint32 private _cliffPeriod; /* Duration of the cliff, with respect to the grant start day, in days. */
@@ -40,12 +42,21 @@ contract Vesting is Ownable {
     constructor(address token) {
         require(token != address(0), "Vesting: token address must not be 0");
         _token = IERC20(token);
-        tokenAddress = token; // fix later
+        // tokenAddress = token; // fix later
         _isSetSchedule = false;
+        _owner = msg.sender;
     }
 
+    modifier onlyOwner() {
+        require(msg.sender == _owner, "Vesting: Not Owner");
+        _;
+    }
     modifier onlyUser() {
-        //  require(); /* */
+        require(_users[msg.sender].amount > 0, "Vesting: Not User");
+        _;
+    }
+    modifier afterSetSchedule() {
+        require(_startDate > 0, "Vesting: Set schedule first");
         _;
     }
 
@@ -76,75 +87,98 @@ contract Vesting is Ownable {
         return _isSetSchedule;
     }
 
-
-    //tokenCanWithdraw tự tính toán lại ở đây, đừng làm nhiều hàm quá.
-    function withdrawToken() public payable onlyUser returns (bool ok) {
-        require(
-            tokenCanWithdraw(msg.sender) > 0,
-            "Vesting: Insufficient amount to withdraw"
-        );
-
-
-        _users[msg.sender].amountClaimed += tokenCanWithdraw(msg.sender);
-
-        _token.safeTransfer(msg.sender, tokenCanWithdraw(msg.sender));
-
-        emit WithdrawToken();
-
-        return true;
-    }
-
-    //TODO chú có cái mapping _users này để làm gì?
-    function vestingOf(address account)
-        public
-        view
-        onlyUser
-        onlyOwner
-        returns (uint256 claim, uint256 remain)
-    {
-        return (tokenClaimed(account), tokenRemained(account));
-    }
-
-    ///// Calculating section
-
     function _today() private view returns (uint32 dayNumber) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
-    //TODO những hàm này chỉ cần cập nhật con số lúc withdraw là được mà, sao cần cả hàm vậy e
-    function tokenRemained(address account) public view returns (uint256) {
+    //TODO:tokenCanWithdraw tự tính toán lại ở đây, đừng làm nhiều hàm quá.
+    function withdrawToken()
+        public
+        payable
+        onlyUser
+        afterSetSchedule
+        returns (uint256 _tokenCanWithdraw)
+    {
+        // CALCULATE TOKEN CAN WITHDRAW
         uint32 onday = _today();
-        User memory user = _users[account];
+        User memory user = _users[msg.sender];
+        uint256 tokenCanWithdraw;
 
-        //if user has no schedule or before cliff, then full
+        //if user has no schedule or before cliff, then 0
         if (!_isSetSchedule || onday < _startDate + _cliffPeriod) {
-            return user.amount;
+            tokenCanWithdraw = uint256(0);
         }
-        //if after end of vesting, return 0
+        //if after end of vesting, return full
         else if (onday >= _startDate + _interval * _milestones) {
-            return uint256(0);
+            tokenCanWithdraw = user.amount - user.amountClaimed;
         }
         // otherwise, calcute
         else {
             uint32 daysVested = onday - _startDate;
             uint32 milestonesVested = (daysVested - _cliffPeriod) / _interval;
-
             uint256 vested = (user.amount * (milestonesVested + 1)) /
                 _milestones;
-            return (user.amount - vested);
+            tokenCanWithdraw = vested - user.amountClaimed;
         }
+        ///
+        require(
+            tokenCanWithdraw > 0,
+            "Vesting: Insufficient amount to withdraw"
+        );
+
+        _users[msg.sender].amountClaimed += tokenCanWithdraw;
+
+        _token.safeTransfer(msg.sender, tokenCanWithdraw);
+
+        emit WithdrawToken();
+
+        return tokenCanWithdraw;    //if use call() in js, return tokenCanWithdraw
     }
 
-    //TODO tại sao lại cần hàm này? trong mapping không lấy ra được à?
-    function tokenClaimed(address account) public view returns (uint256) {
-        return (_users[account].amount - tokenRemained(account));
+    function vestingOf(address account)
+        public
+        view
+        afterSetSchedule
+        returns (uint256 claim, uint256 remain)
+    {
+        require(
+            _users[msg.sender].amount > 0 || msg.sender == _owner,
+            "Vesting: Not owner or user"
+        );
+        return (
+            _users[account].amountClaimed,
+            (_users[account].amount - _users[account].amountClaimed)
+        );
     }
 
+    ///// Calculating section
 
-    //TODO tại sao lại cần hàm này?
-    function tokenCanWithdraw(address account) public view returns (uint256) {
-        return (tokenClaimed(account) - _users[account].amountClaimed);
-    }
+    //TODO những hàm này chỉ cần cập nhật con số lúc withdraw là được mà, sao cần cả hàm vậy e
+    // function tokenCanWithdraw(address account)
+    //     public
+    //     view
+    //     afterSetSchedule
+    //     returns (uint256)
+    // {
+    //     uint32 onday = _today();
+    //     User memory user = _users[account];
+    //     //if user has no schedule or before cliff, then 0
+    //     if (!_isSetSchedule || onday < _startDate + _cliffPeriod) {
+    //         return uint256(0);
+    //     }
+    //     //if after end of vesting, return full
+    //     else if (onday >= _startDate + _interval * _milestones) {
+    //         return _users[account].amount - _users[account].amountClaimed;
+    //     }
+    //     // otherwise, calcute
+    //     else {
+    //         uint32 daysVested = onday - _startDate;
+    //         uint32 milestonesVested = (daysVested - _cliffPeriod) / _interval;
+    //         uint256 vested = (user.amount * (milestonesVested + 1)) /
+    //             _milestones;
+    //         return vested - _users[account].amountClaimed;
+    //     }
+    // }
 
     ///////// User Handle Section
 
@@ -152,10 +186,14 @@ contract Vesting is Ownable {
     function addUser(address account, uint256 amount)
         public
         onlyOwner
+        afterSetSchedule
         returns (bool ok)
     {
         require(amount > 0, "Vesting: Insufficient amount");
-
+        require(
+            _startDate > _today(),
+            "Vesting: Can't add user after Start Date"
+        );
         _users[account].amount = amount;
         _users[account].amountClaimed = 0;
         emit AddUser(account, amount);
@@ -166,27 +204,10 @@ contract Vesting is Ownable {
         return _users[account].amount > 0;
     }
 
-    function checkBalance(address account)
-        public
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return _users[account].amount;
-    }
-
-    function checkClaimedAmount(address account)
-        public
-        view
-        onlyOwner
-        returns (uint256)
-    {
-        return _users[account].amountClaimed;
-    }
-
     function addManyUser(address[] memory accounts, uint256[] memory amounts)
         public
         onlyOwner
+        afterSetSchedule
         returns (bool ok)
     {
         //require acc, amount length > 0
@@ -202,12 +223,16 @@ contract Vesting is Ownable {
         return true;
     }
 
-    function removeUser(address account) public onlyOwner returns (bool ok) {
+    function removeUser(address account)
+        public
+        onlyOwner
+        afterSetSchedule
+        returns (bool ok)
+    {
         require( // can remove user if now is before vesting or schedule is not set
-            _startDate >= (block.timestamp / SECONDS_PER_DAY) ||
-                _startDate == 0,
+            _startDate >= _today() || _startDate == 0,
             "Vesting: can't remove user when vesting"
-        ); 
+        );
 
         _users[account].amount = 0;
         _users[account].amountClaimed = 0;
