@@ -28,6 +28,9 @@ contract('Vesting', (accounts) => {
 
 
     describe("Schedule", () => {
+
+
+
         it('should set vesting schedule', async () => {
             const startDate = 100;
             const cliffPeriod = 360;
@@ -99,7 +102,7 @@ contract('Vesting', (accounts) => {
 
             assert.equal(checkBalance["remain"], amount, "didn't put token to user!!");
         });
-        it('should not add user', async () => {
+        it('should not add user when not set account', async () => {
             const startDate = today + 1;
             const setVesting = await vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] });
             const amount = 0;
@@ -107,7 +110,17 @@ contract('Vesting', (accounts) => {
             await truffleAssert.reverts(vestingInstance.addUser(accounts[1], amount, { from: accounts[0] }), "Vesting: Insufficient amount");
 
         });
+        it('should not add account because totaluseramount > totalamount', async () => {
 
+            total = await token.totalSupply.call();
+
+            const startDate = today + 1;
+            const setVesting = await vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] });
+            const amount = total + 1;
+
+            await truffleAssert.reverts(vestingInstance.addUser(accounts[1], amount, { from: accounts[0] }), "Vesting: Not enough token");
+
+        });
 
         it('should add 2 users', async () => {
             const startDate = today + 1;
@@ -292,8 +305,8 @@ contract('Vesting', (accounts) => {
 
 
             const withdrawCase1 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-                                                                //Nếu ko gọi hàm call thì timemachine trả về thời gian hiện tại nên
-                                                                //ko thể withdraw được
+            //Nếu ko gọi hàm call thì timemachine trả về thời gian hiện tại nên
+            //ko thể withdraw được
             assert.equal(withdrawCase1, 6000, "case1 wrong");
 
 

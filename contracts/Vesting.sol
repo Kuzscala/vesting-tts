@@ -12,9 +12,8 @@ contract Vesting {
     uint32 private constant SECONDS_PER_DAY = 24 * 60 * 60;
 
     IERC20 private _token;
-
-    // address tokenAddress;
     address private _owner;
+    uint256 private _totalUserAmount;
 
     uint32 private _startDate;
     uint32 private _cliffPeriod; /* Duration of the cliff, with respect to the grant start day, in days. */
@@ -42,7 +41,6 @@ contract Vesting {
     constructor(address token) {
         require(token != address(0), "Vesting: token address must not be 0");
         _token = IERC20(token);
-        // tokenAddress = token; // fix later
         _isSetSchedule = false;
         _owner = msg.sender;
     }
@@ -91,7 +89,6 @@ contract Vesting {
         return uint32(block.timestamp / SECONDS_PER_DAY);
     }
 
-    //TODO:tokenCanWithdraw tự tính toán lại ở đây, đừng làm nhiều hàm quá.
     function withdrawToken()
         public
         payable
@@ -132,7 +129,7 @@ contract Vesting {
 
         emit WithdrawToken();
 
-        return tokenCanWithdraw;    //if use call() in js, return tokenCanWithdraw
+        return tokenCanWithdraw; //if use call() in js, return tokenCanWithdraw
     }
 
     function vestingOf(address account)
@@ -151,38 +148,6 @@ contract Vesting {
         );
     }
 
-    ///// Calculating section
-
-    //TODO những hàm này chỉ cần cập nhật con số lúc withdraw là được mà, sao cần cả hàm vậy e
-    // function tokenCanWithdraw(address account)
-    //     public
-    //     view
-    //     afterSetSchedule
-    //     returns (uint256)
-    // {
-    //     uint32 onday = _today();
-    //     User memory user = _users[account];
-    //     //if user has no schedule or before cliff, then 0
-    //     if (!_isSetSchedule || onday < _startDate + _cliffPeriod) {
-    //         return uint256(0);
-    //     }
-    //     //if after end of vesting, return full
-    //     else if (onday >= _startDate + _interval * _milestones) {
-    //         return _users[account].amount - _users[account].amountClaimed;
-    //     }
-    //     // otherwise, calcute
-    //     else {
-    //         uint32 daysVested = onday - _startDate;
-    //         uint32 milestonesVested = (daysVested - _cliffPeriod) / _interval;
-    //         uint256 vested = (user.amount * (milestonesVested + 1)) /
-    //             _milestones;
-    //         return vested - _users[account].amountClaimed;
-    //     }
-    // }
-
-    ///////// User Handle Section
-
-    //TODO only addUser before startDate
     function addUser(address account, uint256 amount)
         public
         onlyOwner
@@ -194,8 +159,13 @@ contract Vesting {
             _startDate > _today(),
             "Vesting: Can't add user after Start Date"
         );
+        require(
+            amount + _totalUserAmount <= _token.totalSupply(),
+            "Vesting: Not enough token"
+        );
         _users[account].amount = amount;
         _users[account].amountClaimed = 0;
+        _totalUserAmount += amount;
         emit AddUser(account, amount);
         return true;
     }
@@ -234,6 +204,7 @@ contract Vesting {
             "Vesting: can't remove user when vesting"
         );
 
+        _totalUserAmount -= _users[account].amount;
         _users[account].amount = 0;
         _users[account].amountClaimed = 0;
         emit RemoveUser(account);
