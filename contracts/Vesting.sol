@@ -4,15 +4,15 @@ pragma solidity ^0.8.9;
 import "./Token.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-//import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Vesting {
+contract Vesting is Ownable {
     using SafeERC20 for IERC20;
 
     uint32 private constant SECONDS_PER_DAY = 24 * 60 * 60;
 
     IERC20 private _token;
-    address private _owner;
+    //address private _owner;
     uint256 private _totalUserAmount;
 
     uint32 private _startDate;
@@ -42,13 +42,13 @@ contract Vesting {
         require(token != address(0), "Vesting: token address must not be 0");
         _token = IERC20(token);
         _isSetSchedule = false;
-        _owner = msg.sender;
+        // _owner = msg.sender;
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == _owner, "Vesting: Not Owner");
-        _;
-    }
+    // modifier onlyOwner() {
+    //     require(msg.sender == _owner, "Vesting: Not Owner");
+    //     _;
+    // }
     modifier onlyUser() {
         require(_users[msg.sender].amount > 0, "Vesting: Not User");
         _;
@@ -124,9 +124,7 @@ contract Vesting {
         );
 
         _users[msg.sender].amountClaimed += tokenCanWithdraw;
-
         _token.safeTransfer(msg.sender, tokenCanWithdraw);
-
         emit WithdrawToken();
 
         return tokenCanWithdraw; //if use call() in js, return tokenCanWithdraw
@@ -139,7 +137,7 @@ contract Vesting {
         returns (uint256 claim, uint256 remain)
     {
         require(
-            _users[msg.sender].amount > 0 || msg.sender == _owner,
+            _users[msg.sender].amount > 0 || msg.sender == owner(),
             "Vesting: Not owner or user"
         );
         return (

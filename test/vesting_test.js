@@ -28,9 +28,6 @@ contract('Vesting', (accounts) => {
 
 
     describe("Schedule", () => {
-
-
-
         it('should set vesting schedule', async () => {
             const startDate = 100;
             const cliffPeriod = 360;
@@ -38,19 +35,26 @@ contract('Vesting', (accounts) => {
             const milestones = 5;
 
             const setVesting = await vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] });
-
             const isSet = await vestingInstance.isSetVestingSchedule.call();
-
             assert.equal(isSet, true, "schedule is not set!!");
         });
         it('should not set vesting schedule because of invalid input', async () => {
-            const startDate = 0;
+            const startDate = 100;
             const cliffPeriod = 360;
             const interval = 90;
             const milestones = 5;
 
             await truffleAssert.reverts(
-                vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] }),
+                vestingInstance.setVestingSchedule(0, cliffPeriod, interval, milestones, { from: accounts[0] }),
+                "Vesting: Invalid input!");
+            await truffleAssert.reverts(
+                vestingInstance.setVestingSchedule(startDate, 0, interval, milestones, { from: accounts[0] }),
+                "Vesting: Invalid input!");
+            await truffleAssert.reverts(
+                vestingInstance.setVestingSchedule(startDate, cliffPeriod, 0, milestones, { from: accounts[0] }),
+                "Vesting: Invalid input!");
+            await truffleAssert.reverts(
+                vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, 0, { from: accounts[0] }),
                 "Vesting: Invalid input!");
 
         });
