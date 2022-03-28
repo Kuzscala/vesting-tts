@@ -45,10 +45,7 @@ contract Vesting is Ownable {
         // _owner = msg.sender;
     }
 
-    // modifier onlyOwner() {
-    //     require(msg.sender == _owner, "Vesting: Not Owner");
-    //     _;
-    // }
+
     modifier onlyUser() {
         require(_users[msg.sender].amount > 0, "Vesting: Not User");
         _;
@@ -87,6 +84,32 @@ contract Vesting is Ownable {
 
     function _today() private view returns (uint32 dayNumber) {
         return uint32(block.timestamp / SECONDS_PER_DAY);
+    }
+
+    // for testing purpose only
+    function amountCanWithdraw(address account) public view returns (uint256) {
+        // CALCULATE TOKEN CAN WITHDRAW
+        uint32 onday = _today();
+        User memory user = _users[account];
+        uint256 tokenCanWithdraw;
+
+        //if user has no schedule or before cliff, then 0
+        if (!_isSetSchedule || onday < _startDate + _cliffPeriod) {
+            tokenCanWithdraw = uint256(0);
+        }
+        //if after end of vesting, return full
+        else if (onday >= _startDate + _interval * _milestones) {
+            tokenCanWithdraw = user.amount - user.amountClaimed;
+        }
+        // otherwise, calcute
+        else {
+            uint32 daysVested = onday - _startDate;
+            uint32 milestonesVested = (daysVested - _cliffPeriod) / _interval;
+            uint256 vested = (user.amount * (milestonesVested + 1)) /
+                _milestones;
+            tokenCanWithdraw = vested - user.amountClaimed;
+        }
+        return tokenCanWithdraw;
     }
 
     function withdrawToken()

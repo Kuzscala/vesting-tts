@@ -214,55 +214,42 @@ contract('Vesting', (accounts) => {
         const cliffPeriod = 60;
         const interval = 60;
         const milestones = 5;
-        // it.only('should return correct tokencanwithdraw', async () => {
-        //     await token.transfer(vestingInstance.address, 1000000000, { from: accounts[0] });
+        it('should return correct tokencanwithdraw', async () => {
+            await token.transfer(vestingInstance.address, 1000000000, { from: accounts[0] });
+            const startDate = today + 30;
 
+            const setVesting = await vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] });
 
-        //     const startDate = today + 30;
+            const amount = 10000;
+            const addUser = await vestingInstance.addUser(accounts[1], amount, { from: accounts[0] });
+            const withdrawCase1 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase1, 0, "case1 wrong");
 
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in cliff day
+            const withdrawCase2 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase2, 0, "case2 wrong");
 
-        //     const setVesting = await vestingInstance.setVestingSchedule(startDate, cliffPeriod, interval, milestones, { from: accounts[0] });
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 1
+            const withdrawCase3 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase3, 2000, "case3 wrong");
 
-        //     const amount = 10000;
-        //     const addUser = await vestingInstance.addUser(accounts[1], amount, { from: accounts[0] });
-        //     console.log(await token.balanceOf.call(vestingInstance.address));
-        //     await vestingInstance.withdrawToken({ from: accounts[1] });
-        //     const withdrawCase1 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase1, 0, "case1 wrong");
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 2
+            const withdrawCase4 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase4, 4000, "case4 wrong");
 
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in cliff day
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 3
+            const withdrawCase5 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase5, 6000, "case5 wrong");
 
-        //     const withdrawCase2 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase2, 0, "case2 wrong");
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 4
+            const withdrawCase6 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase6, 8000, "case6 wrong");
 
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 1
+            await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 5
+            const withdrawCase7 = await vestingInstance.amountCanWithdraw.call(accounts[1]);
+            assert.equal(withdrawCase7, 10000, "case7 wrong");
 
-
-        //     const withdrawCase3 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase3, 2000, "case3 wrong");
-
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 2
-
-
-        //     const withdrawCase4 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase4, 4000, "case4 wrong");
-
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 3
-
-        //     const withdrawCase5 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase5, 6000, "case5 wrong");
-
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 4
-
-        //     const withdrawCase6 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase6, 8000, "case6 wrong");
-
-        //     await timeMachine.advanceTimeAndBlock(SECONDS_PER_DAY * 60); // in milestone 5
-
-        //     const withdrawCase7 = await vestingInstance.withdrawToken.call({ from: accounts[1] });
-        //     assert.equal(withdrawCase7, 10000, "case7 wrong");
-
-        // });
+        });
 
         it('should return vestingOf() properly', async () => {
             const startDate = today + 1;
